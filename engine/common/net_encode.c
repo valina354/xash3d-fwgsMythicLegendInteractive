@@ -974,14 +974,14 @@ static qboolean Delta_CompareField( delta_t *pField, void *from, void *to, doubl
 			toF = *(uint8_t *)((int8_t *)to + pField->offset );
 		}
 
+		if( !Q_equal(pField->multiplier, 1.0f ))
+		{
+			fromF *= pField->multiplier;
+			toF *= pField->multiplier;
+		}
+
 		fromF = Delta_ClampIntegerField( pField, fromF, signbit, pField->bits );
 		toF = Delta_ClampIntegerField( pField, toF, signbit, pField->bits );
-
-		if( !Q_equal(pField->multiplier, 1.0f ))
-			fromF *= pField->multiplier;
-
-		if( !Q_equal( pField->multiplier, 1.0f ))
-			toF *= pField->multiplier;
 	}
 	else if( pField->flags & DT_SHORT )
 	{
@@ -996,14 +996,14 @@ static qboolean Delta_CompareField( delta_t *pField, void *from, void *to, doubl
 			toF = *(uint16_t *)((int8_t *)to + pField->offset );
 		}
 
+		if( !Q_equal(pField->multiplier, 1.0f ))
+		{
+			fromF *= pField->multiplier;
+			toF *= pField->multiplier;
+		}
+
 		fromF = Delta_ClampIntegerField( pField, fromF, signbit, pField->bits );
 		toF = Delta_ClampIntegerField( pField, toF, signbit, pField->bits );
-
-		if( !Q_equal(pField->multiplier, 1.0f ))
-			fromF *= pField->multiplier;
-
-		if( !Q_equal( pField->multiplier, 1.0f ))
-			toF *= pField->multiplier;
 	}
 	else if( pField->flags & DT_INTEGER )
 	{
@@ -1017,14 +1017,15 @@ static qboolean Delta_CompareField( delta_t *pField, void *from, void *to, doubl
 			fromF = *(uint32_t *)((int8_t *)from + pField->offset );
 			toF = *(uint32_t *)((int8_t *)to + pField->offset );
 		}
-		fromF = Delta_ClampIntegerField( pField, fromF, signbit, pField->bits );
-		toF = Delta_ClampIntegerField( pField, toF, signbit, pField->bits );
 
 		if( !Q_equal(pField->multiplier, 1.0f ))
+		{
 			fromF *= pField->multiplier;
-
-		if( !Q_equal( pField->multiplier, 1.0f ))
 			toF *= pField->multiplier;
+		}
+
+		fromF = Delta_ClampIntegerField( pField, fromF, signbit, pField->bits );
+		toF = Delta_ClampIntegerField( pField, toF, signbit, pField->bits );
 	}
 	else if( pField->flags & ( DT_ANGLE|DT_FLOAT ))
 	{
@@ -1034,33 +1035,17 @@ static qboolean Delta_CompareField( delta_t *pField, void *from, void *to, doubl
 	}
 	else if( pField->flags & DT_TIMEWINDOW_8 )
 	{
-		val_a = Q_rint((*(float *)((byte *)from + pField->offset )) * 100.0f );
-		val_b = Q_rint((*(float *)((byte *)to + pField->offset )) * 100.0f );
-		val_a -= Q_rint(timebase * 100.0);
-		val_b -= Q_rint(timebase * 100.0);
-		fromF = FloatAsInt( val_a );
-		toF = FloatAsInt( val_b );
+		val_a = *(float *)((byte *)from + pField->offset );
+		val_b = *(float *)((byte *)to + pField->offset );
+		fromF = Q_rint(( timebase - val_a ) * 100.0 );
+		toF = Q_rint(( timebase - val_b ) * 100.0 );
 	}
 	else if( pField->flags & DT_TIMEWINDOW_BIG )
 	{
-		val_a = (*(float *)((byte *)from + pField->offset ));
-		val_b = (*(float *)((byte *)to + pField->offset ));
-
-		if( !Q_equal( pField->multiplier, 1.0f ))
-		{
-			val_a *= pField->multiplier;
-			val_b *= pField->multiplier;
-			val_a = (timebase * pField->multiplier) - val_a;
-			val_b = (timebase * pField->multiplier) - val_b;
-		}
-		else
-		{
-			val_a = timebase - val_a;
-			val_b = timebase - val_b;
-		}
-
-		fromF = FloatAsInt( val_a );
-		toF = FloatAsInt( val_b );
+		val_a = *(float *)((byte *)from + pField->offset );
+		val_b = *(float *)((byte *)to + pField->offset );
+		fromF = Q_rint(( timebase - val_a ) * pField->multiplier );
+		toF = Q_rint(( timebase - val_b ) * pField->multiplier );
 	}
 	else if( pField->flags & DT_STRING )
 	{
@@ -1144,6 +1129,7 @@ static qboolean Delta_WriteField( sizebuf_t *msg, delta_t *pField, void *from, v
 	int		signbit = FBitSet( pField->flags, DT_SIGNED ) ? 1 : 0;
 	float		flValue, flAngle;
 	uint		iValue;
+	int dt;
 	const char	*pStr;
 
 	if( Delta_CompareField( pField, from, to, timebase ))
@@ -1160,11 +1146,11 @@ static qboolean Delta_WriteField( sizebuf_t *msg, delta_t *pField, void *from, v
 			iValue = *(int8_t *)((int8_t *)to + pField->offset );
 		else
 			iValue = *(uint8_t *)((int8_t *)to + pField->offset );
-		iValue = Delta_ClampIntegerField( pField, iValue, signbit, pField->bits );
 
-		if( !Q_equal( pField->multiplier, 1.0 ) )
+		if( !Q_equal( pField->multiplier, 1.0 ))
 			iValue *= pField->multiplier;
 
+		iValue = Delta_ClampIntegerField( pField, iValue, signbit, pField->bits );
 		MSG_WriteBitLong( msg, iValue, pField->bits, signbit );
 	}
 	else if( pField->flags & DT_SHORT )
@@ -1173,11 +1159,11 @@ static qboolean Delta_WriteField( sizebuf_t *msg, delta_t *pField, void *from, v
 			iValue = *(int16_t *)((int8_t *)to + pField->offset );
 		else
 			iValue = *(uint16_t *)((int8_t *)to + pField->offset );
-		iValue = Delta_ClampIntegerField( pField, iValue, signbit, pField->bits );
 
-		if( !Q_equal( pField->multiplier, 1.0 ) )
+		if( !Q_equal( pField->multiplier, 1.0 ))
 			iValue *= pField->multiplier;
-	
+
+		iValue = Delta_ClampIntegerField( pField, iValue, signbit, pField->bits );
 		MSG_WriteBitLong( msg, iValue, pField->bits, signbit );
 	}
 	else if( pField->flags & DT_INTEGER )
@@ -1186,11 +1172,11 @@ static qboolean Delta_WriteField( sizebuf_t *msg, delta_t *pField, void *from, v
 			iValue = *(int32_t *)((int8_t *)to + pField->offset );
 		else
 			iValue = *(uint32_t *)((int8_t *)to + pField->offset );
-		iValue = Delta_ClampIntegerField( pField, iValue, signbit, pField->bits );
 
-		if( !Q_equal( pField->multiplier, 1.0 ) )
+		if( !Q_equal( pField->multiplier, 1.0 ))
 			iValue *= pField->multiplier;
 
+		iValue = Delta_ClampIntegerField( pField, iValue, signbit, pField->bits );
 		MSG_WriteBitLong( msg, iValue, pField->bits, signbit );
 	}
 	else if( pField->flags & DT_FLOAT )
@@ -1210,19 +1196,17 @@ static qboolean Delta_WriteField( sizebuf_t *msg, delta_t *pField, void *from, v
 	}
 	else if( pField->flags & DT_TIMEWINDOW_8 )
 	{
-		signbit = 1; // timewindow is always signed
 		flValue = *(float *)((byte *)to + pField->offset );
-		iValue = (int)Q_rint( timebase * 100.0 ) - (int)Q_rint( flValue * 100.0 );
-		iValue = Delta_ClampIntegerField( pField, iValue, signbit, pField->bits );
-		MSG_WriteBitLong( msg, iValue, pField->bits, signbit );
+		dt = Q_rint(( timebase - flValue ) * 100.0 );
+		dt = Delta_ClampIntegerField( pField, dt, 1, pField->bits );
+		MSG_WriteSBitLong( msg, dt, pField->bits );
 	}
 	else if( pField->flags & DT_TIMEWINDOW_BIG )
 	{
-		signbit = 1; // timewindow is always signed
 		flValue = *(float *)((byte *)to + pField->offset );
-		iValue = (int)Q_rint( timebase * pField->multiplier ) - (int)Q_rint( flValue * pField->multiplier );
-		iValue = Delta_ClampIntegerField( pField, iValue, signbit, pField->bits );
-		MSG_WriteBitLong( msg, iValue, pField->bits, signbit );
+		dt = Q_rint(( timebase - flValue ) * pField->multiplier );
+		dt = Delta_ClampIntegerField( pField, dt, 1, pField->bits );
+		MSG_WriteSBitLong( msg, dt, pField->bits );
 	}
 	else if( pField->flags & DT_STRING )
 	{
@@ -1306,8 +1290,11 @@ static qboolean Delta_ReadField( sizebuf_t *msg, delta_t *pField, void *from, vo
 	if( pField->flags & DT_BYTE )
 	{
 		iValue = MSG_ReadBitLong( msg, pField->bits, bSigned );
-		if( !Q_equal( pField->multiplier, 1.0 ) )
+		if( !Q_equal( pField->multiplier, 1.0 ))
 			iValue /= pField->multiplier;
+
+		if( !Q_equal( pField->post_multiplier, 1.0 ))
+			iValue *= pField->post_multiplier;
 
 		if( bSigned )
 			*(int8_t *)((uint8_t *)to + pField->offset ) = iValue;
@@ -1317,8 +1304,11 @@ static qboolean Delta_ReadField( sizebuf_t *msg, delta_t *pField, void *from, vo
 	else if( pField->flags & DT_SHORT )
 	{
 		iValue = MSG_ReadBitLong( msg, pField->bits, bSigned );
-		if( !Q_equal( pField->multiplier, 1.0 ) )
+		if( !Q_equal( pField->multiplier, 1.0 ))
 			iValue /= pField->multiplier;
+
+		if( !Q_equal( pField->post_multiplier, 1.0 ))
+			iValue *= pField->post_multiplier;
 
 		if( bSigned )
 			*(int16_t *)((uint8_t *)to + pField->offset ) = iValue;
@@ -1328,8 +1318,11 @@ static qboolean Delta_ReadField( sizebuf_t *msg, delta_t *pField, void *from, vo
 	else if( pField->flags & DT_INTEGER )
 	{
 		iValue = MSG_ReadBitLong( msg, pField->bits, bSigned );
-		if( !Q_equal( pField->multiplier, 1.0 ) )
+		if( !Q_equal( pField->multiplier, 1.0 ))
 			iValue /= pField->multiplier;
+
+		if( !Q_equal( pField->post_multiplier, 1.0 ))
+			iValue *= pField->post_multiplier;
 
 		if( bSigned )
 			*(int32_t *)((uint8_t *)to + pField->offset ) = iValue;
@@ -1344,11 +1337,11 @@ static qboolean Delta_ReadField( sizebuf_t *msg, delta_t *pField, void *from, vo
 		else
 			flValue = iValue;
 
-		if( !Q_equal( pField->multiplier, 1.0 ) )
-			flValue = flValue / pField->multiplier;
+		if( !Q_equal( pField->multiplier, 1.0 ))
+			flValue /= pField->multiplier;
 
-		if( !Q_equal( pField->post_multiplier, 1.0 ) )
-			flValue = flValue * pField->post_multiplier;
+		if( !Q_equal( pField->post_multiplier, 1.0 ))
+			flValue *= pField->post_multiplier;
 
 		*(float *)((byte *)to + pField->offset ) = flValue;
 	}
@@ -1370,7 +1363,7 @@ static qboolean Delta_ReadField( sizebuf_t *msg, delta_t *pField, void *from, vo
 		bSigned = true; // timewindow is always signed
 		iValue = MSG_ReadBitLong( msg, pField->bits, bSigned );
 
-		if( !Q_equal( pField->multiplier, 1.0 ) )
+		if( !Q_equal( pField->multiplier, 1.0 ))
 			flTime = ( timebase * pField->multiplier - (int)iValue ) / pField->multiplier;
 		else
 			flTime = timebase - (int)iValue;
