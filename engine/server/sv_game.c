@@ -3344,12 +3344,10 @@ pfnPEntityOfEntIndex
 
 =============
 */
-static edict_t *pfnPEntityOfEntIndex( int iEntIndex )
+static edict_t *pfnPEntityOfEntIndexBroken( int iEntIndex )
 {
 	// have to be bug-compatible with GoldSrc in this function
-	if( host.bugcomp == BUGCOMP_GOLDSRC )
-		return SV_PEntityOfEntIndex( iEntIndex, false );
-	return SV_PEntityOfEntIndex( iEntIndex, true );
+	return SV_PEntityOfEntIndex( iEntIndex, false );
 }
 
 /*
@@ -4684,7 +4682,7 @@ static enginefuncs_t gEngfuncs =
 	pfnPEntityOfEntOffset,
 	pfnEntOffsetOfPEntity,
 	pfnIndexOfEdict,
-	pfnPEntityOfEntIndex,
+	pfnPEntityOfEntIndexAllEntities,
 	pfnFindEntityByVars,
 	pfnGetModelPtr,
 	pfnRegUserMsg,
@@ -5155,6 +5153,11 @@ qboolean SV_LoadProgs( const char *name )
 	// make sure what physic functions is cleared
 	memset( &svgame.physFuncs, 0, sizeof( svgame.physFuncs ));
 
+	// revert fix for pfnPEntityOfEntIndex to be compatible with GoldSrc
+	// games that rely on this bug
+	if( FBitSet( host.bugcomp, BUGCOMP_PENTITYOFENTINDEX_FLAG ))
+		gEngfuncs.pfnPEntityOfEntIndex = pfnPEntityOfEntIndexBroken;
+
 	// make local copy of engfuncs to prevent overwrite it with bots.dll
 	memcpy( &gpEngfuncs, &gEngfuncs, sizeof( gpEngfuncs ));
 
@@ -5167,7 +5170,7 @@ qboolean SV_LoadProgs( const char *name )
 		COM_FreeLibrary( svgame.hInstance );
 		Con_Printf( S_ERROR "SV_LoadProgs: failed to get address of GetEntityAPI proc\n" );
 		svgame.hInstance = NULL;
-		Mem_FreePool(&svgame.mempool);
+		Mem_FreePool( &svgame.mempool );
 		return false;
 	}
 
@@ -5178,7 +5181,7 @@ qboolean SV_LoadProgs( const char *name )
 		COM_FreeLibrary( svgame.hInstance );
 		Con_Printf( S_ERROR "SV_LoadProgs: failed to get address of GiveFnptrsToDll proc\n" );
 		svgame.hInstance = NULL;
-		Mem_FreePool(&svgame.mempool);
+		Mem_FreePool( &svgame.mempool );
 		return false;
 	}
 
@@ -5203,7 +5206,8 @@ qboolean SV_LoadProgs( const char *name )
 	{
 		if( !GetEntityAPI2( &svgame.dllFuncs, &version ))
 		{
-			Con_Printf( S_WARN "SV_LoadProgs: interface version %i should be %i\n", INTERFACE_VERSION, version );
+			if( INTERFACE_VERSION != version )
+				Con_Printf( S_WARN "SV_LoadProgs: interface version %i should be %i\n", INTERFACE_VERSION, version );
 
 			// fallback to old API
 			if( !GetEntityAPI( &svgame.dllFuncs, version ))
@@ -5211,9 +5215,10 @@ qboolean SV_LoadProgs( const char *name )
 				COM_FreeLibrary( svgame.hInstance );
 				Con_Printf( S_ERROR "SV_LoadProgs: couldn't get entity API\n" );
 				svgame.hInstance = NULL;
-				Mem_FreePool(&svgame.mempool);
+				Mem_FreePool( &svgame.mempool );
 				return false;
 			}
+			else Con_Reportf( "SV_LoadProgs: ^2initailized legacy EntityAPI ^7ver. %i\n", version );
 		}
 		else Con_Reportf( "SV_LoadProgs: ^2initailized extended EntityAPI ^7ver. %i\n", version );
 	}
@@ -5222,9 +5227,10 @@ qboolean SV_LoadProgs( const char *name )
 		COM_FreeLibrary( svgame.hInstance );
 		Con_Printf( S_ERROR "SV_LoadProgs: couldn't get entity API\n" );
 		svgame.hInstance = NULL;
-		Mem_FreePool(&svgame.mempool);
+		Mem_FreePool( &svgame.mempool );
 		return false;
 	}
+	else Con_Reportf( "SV_LoadProgs: ^2initailized legacy EntityAPI ^7ver. %i\n", version );
 
 	SV_InitOperatorCommands();
 	Mod_InitStudioAPI();
